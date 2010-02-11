@@ -80,6 +80,11 @@ module Haml
     # of a multiline string.
     # @private
     MULTILINE_CHAR_VALUE = ?|
+    
+    # The value of the charachter used to separate ruby arguments
+    # Used to identify multiline ruby statements
+    # @private
+    RUBY_ARGUMENT_SEPARATOR = ?,
 
     # Regex to match keywords that appear in the middle of a Ruby block
     # with lowered indentation.
@@ -306,6 +311,7 @@ END
     # Evaluates `text` in the context of the scope object, but
     # does not output the result.
     def push_silent(text, can_suppress = false)
+      text = handle_multiline_ruby_arguments(text)
       flush_merged_text
       return if can_suppress && options[:suppress_eval]
       @precompiled << "#{text};"
@@ -395,6 +401,7 @@ END
     # the result before it is added to `@buffer`
     def push_script(text, opts = {})
       raise SyntaxError.new("There's no Ruby code for = to evaluate.") if text.empty?
+      text = handle_multiline_ruby_arguments(text)
       return if options[:suppress_eval]
       opts[:escape_html] = options[:escape_html] if opts[:escape_html].nil?
 
@@ -987,7 +994,23 @@ END
     def is_multiline?(text)
       text && text.length > 1 && text[-1] == MULTILINE_CHAR_VALUE && text[-2] == ?\s
     end
-
+    
+    def handle_multiline_ruby_arguments(line)
+      line = line.dup
+      last_line = @index
+      
+      while ends_with_ruby_argument_seperator?(line)
+        line << @next_line.text.strip
+        last_line += 1
+        next_line
+      end
+      return line
+    end
+    
+    def ends_with_ruby_argument_seperator?(line)
+      line && line.length > 1 && line.strip[-1] == RUBY_ARGUMENT_SEPARATOR
+    end
+    
     def contains_interpolation?(str)
       str.include?('#{')
     end

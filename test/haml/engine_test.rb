@@ -1313,6 +1313,43 @@ HAML
       assert_equal('Invalid UTF-16LE character "\xFE"', e.message)
     end
   end
+  
+  def test_multiline_ruby_arguments
+    haml = <<END
+- haml_tag(:p,
+           "Isn't this nice?",
+           :class => "question")
+- haml_tag(:p,
+           "I think so.",
+           :class => "answer")
+Plain text,
+etc.
+&= Array.new(2,
+             'Escaped &').join(' ')
+!= Array.new(2,
+'Unescaped &').join(' ')
+- ['Block',
+   'Test'].each do |word|
+  = word
+- haml_tag(:p,
+           "Whoa it's the end of the file!")
+END
+
+    html = <<END
+<p class='question'>Isn't this nice?</p>
+<p class='answer'>I think so.</p>
+Plain text,
+etc.
+Escaped &amp; Escaped &amp;
+Unescaped & Unescaped &
+Block
+Test
+<p>Whoa it's the end of the file!</p>
+END
+
+    assert_equal(html, render(haml))
+  end
+  
 
   private
 
