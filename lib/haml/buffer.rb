@@ -233,28 +233,41 @@ RUBY
 
     # Merges two attribute hashes.
     # This is the same as `to.merge!(from)`,
-    # except that it merges id and class attributes.
+    # except that it merges id, class, and data attributes.
     #
     # ids are concatenated with `"_"`,
     # and classes are concatenated with `" "`.
+    # data hashes are simply merged.
     #
     # Destructively modifies both `to` and `from`.
     #
     # @param to [{String => String}] The attribute hash to merge into
-    # @param from [{String => String}] The attribute hash to merge from
+    # @param from [{String => #to_s}] The attribute hash to merge from
     # @return [{String => String}] `to`, after being merged
     def self.merge_attrs(to, from)
+      from['id'] = Precompiler.filter_and_join(from['id'], '_') if from['id']
       if to['id'] && from['id']
         to['id'] << '_' << from.delete('id').to_s
       elsif to['id'] || from['id']
         from['id'] ||= to['id']
       end
 
+      from['class'] = Precompiler.filter_and_join(from['class'], ' ') if from['class']
       if to['class'] && from['class']
         # Make sure we don't duplicate class names
-        from['class'] = (from['class'].split(' ') | to['class'].split(' ')).sort.join(' ')
+        from['class'] = (from['class'].to_s.split(' ') | to['class'].split(' ')).sort.join(' ')
       elsif to['class'] || from['class']
         from['class'] ||= to['class']
+      end
+
+      from_data = from['data'].is_a?(Hash)
+      to_data = to['data'].is_a?(Hash)
+      if from_data && to_data
+        to['data'] = to['data'].merge(from['data'])
+      elsif to_data
+        to = Haml::Util.map_keys(to.delete('data')) {|name| "data-#{name}"}.merge(to)
+      elsif from_data
+        from = Haml::Util.map_keys(from.delete('data')) {|name| "data-#{name}"}.merge(from)
       end
 
       to.merge!(from)

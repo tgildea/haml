@@ -65,7 +65,21 @@ class HelperTest < Test::Unit::TestCase
     assert_equal("foo\n  bar\nbaz\n", render("foo\n- tab_up\nbar\n- tab_down\nbaz"))
     assert_equal("          <p>tabbed</p>\n", render("- buffer.tabulation=5\n%p tabbed"))
   end
-  
+
+  def test_with_tabs
+    assert_equal(<<HTML, render(<<HAML))
+Foo
+    Bar
+    Baz
+Baz
+HTML
+Foo
+- with_tabs 2 do
+  = "Bar\\nBaz"
+Baz
+HAML
+  end
+
   def test_helpers_dont_leak
     # Haml helpers shouldn't be accessible from ERB
     render("foo")
@@ -93,9 +107,16 @@ class HelperTest < Test::Unit::TestCase
   def test_form_tag
     # This is usually provided by ActionController::Base.
     def @base.protect_against_forgery?; false; end
-    result = render("- form_tag 'foo' do\n  %p bar\n  %strong baz", :action_view)
-    should_be = "<form action=\"foo\" method=\"post\">\n  <p>bar</p>\n  <strong>baz</strong>\n</form>\n"
-    assert_equal(should_be, result)
+    assert_equal(<<HTML, render(<<HAML, :action_view))
+<form action="foo" method="post">
+  <p>bar</p>
+  <strong>baz</strong>
+</form>
+HTML
+#{rails_block_helper_char} form_tag 'foo' do
+  %p bar
+  %strong baz
+HAML
   end
 
   def test_text_area
@@ -110,16 +131,23 @@ class HelperTest < Test::Unit::TestCase
   end
   
   def test_capture_haml
-    assert_equal("\"<p>13</p>\\n\"\n", render("- foo = capture_haml(13) do |a|\n  %p= a\n= foo.dump"))
+    assert_equal(<<HTML, render(<<HAML))
+"<p>13</p>\\n"
+HTML
+- (foo = capture_haml(13) do |a|
+  %p= a
+- end; nil)
+= foo.dump
+HAML
   end
 
   def test_content_tag_block
-    assert_equal(<<HTML.strip, render(<<HAML, :action_view))
+    assert_equal(<<HTML.strip, render(<<HAML, :action_view).strip)
 <div><p>bar</p>
 <strong>bar</strong>
 </div>
 HTML
-- content_tag :div do
+#{rails_block_helper_char} content_tag :div do
   %p bar
   %strong bar
 HAML
@@ -175,6 +203,16 @@ HAML
 
   def test_haml_tag_autoclosed_tags_are_closed
     assert_equal("<br class='foo' />\n", render("- haml_tag :br, :class => 'foo'"))
+  end
+
+  def test_haml_tag_with_class_array
+    assert_equal("<p class='a b'>foo</p>\n", render("- haml_tag :p, 'foo', :class => %w[a b]"))
+    assert_equal("<p class='a b c d'>foo</p>\n", render("- haml_tag 'p.c.d', 'foo', :class => %w[a b]"))
+  end
+
+  def test_haml_tag_with_id_array
+    assert_equal("<p id='a_b'>foo</p>\n", render("- haml_tag :p, 'foo', :id => %w[a b]"))
+    assert_equal("<p id='c_a_b'>foo</p>\n", render("- haml_tag 'p#c', 'foo', :id => %w[a b]"))
   end
 
   def test_haml_tag_non_autoclosed_tags_arent_closed

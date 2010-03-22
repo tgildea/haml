@@ -70,17 +70,27 @@ class TemplateTest < Test::Unit::TestCase
     end
     
     if Haml::Util.has?(:private_method, base, :evaluate_assigns)
+      # Rails < 3.0
       base.send(:evaluate_assigns)
-    else
+    elsif Haml::Util.has?(:private_method, base, :_evaluate_assigns_and_ivars)
       # Rails 2.2
       base.send(:_evaluate_assigns_and_ivars)
     end
+
+    # This is needed by RJS in (at least) Rails 3
+    base.instance_variable_set('@template', base)
 
     # This is used by form_for.
     # It's usually provided by ActionController::Base.
     def base.protect_against_forgery?; false; end
 
-    base.controller = DummyController.new
+    # In Rails <= 2.1, a fake controller object was needed
+    # to provide the controller path.
+    if ActionPack::VERSION::MAJOR < 2 ||
+        (ActionPack::VERSION::MAJOR == 2 && ActionPack::VERSION::MINOR < 2)
+      base.controller = DummyController.new
+    end
+
     base
   end
 
@@ -184,6 +194,26 @@ class TemplateTest < Test::Unit::TestCase
     assert_equal("2\n", render("= 1+1"))
   end
 
+  unless Haml::Util.ap_geq_3?
+    def test_form_for_error_return
+      assert_raise(Haml::Error) { render(<<HAML) }
+= form_for :article, @article, :url => '' do |f|
+  Title:
+  = f.text_field :title
+  Body:
+  = f.text_field :body
+HAML
+    end
+
+    def test_form_tag_error_return
+      assert_raise(Haml::Error) { render(<<HAML) }
+= form_tag '' do
+  Title:
+  Body:
+HAML
+    end
+  end
+
   def test_haml_options
     old_options = Haml::Template.options.dup
     Haml::Template.options[:suppress_eval] = true
@@ -204,10 +234,13 @@ baz
 HTML
 %p
   foo
-  - with_output_buffer do
+  -# Parenthesis required due to Rails 3.0 deprecation of block helpers
+  -# that return strings.
+  - (with_output_buffer do
     bar
     = "foo".gsub(/./) do |s|
       - "flup"
+  - end; nil)
   baz
 HAML
   end
@@ -240,6 +273,28 @@ END
       assert_match(/^\(haml\):5/, e.backtrace[0])
     else
       assert false
+    end
+  end
+
+  if defined?(ActionView::OutputBuffer) &&
+      Haml::Util.has?(:instance_method, ActionView::OutputBuffer, :append_if_string=)
+    def test_av_block_deprecation_warning
+      assert_warning(/^DEPRECATION WARNING: - style block helpers are deprecated\. Please use =\./) do
+        assert_equal <<HTML, render(<<HAML, :action_view)
+<form action="" method="post">
+  Title:
+  <input id="article_title" name="article[title]" size="30" type="text" value="Hello" />
+  Body:
+  <input id="article_body" name="article[body]" size="30" type="text" value="World" />
+</form>
+HTML
+- form_for :article, @article, :url => '' do |f|
+  Title:
+  = f.text_field :title
+  Body:
+  = f.text_field :body
+HAML
+      end
     end
   end
 
@@ -309,6 +364,20 @@ END
 
     ## Regression
 
+    def test_xss_protection_with_nested_haml_tag
+      assert_equal(<<HTML, render(<<HAML, :action_view))
+<div>
+  <ul>
+    <li>Content!</li>
+  </ul>
+</div>
+HTML
+- haml_tag :div do
+  - haml_tag :ul do
+    - haml_tag :li, "Content!"
+HAML
+    end
+
     def test_xss_protection_with_form_for
       assert_equal(<<HTML, render(<<HAML, :action_view))
 <form action="" method="post">
@@ -318,11 +387,20 @@ END
   <input id="article_body" name="article[body]" size="30" type="text" value="World" />
 </form>
 HTML
-- form_for :article, @article, :url => '' do |f|
+#{rails_block_helper_char} form_for :article, @article, :url => '' do |f|
   Title:
   = f.text_field :title
   Body:
   = f.text_field :body
+HAML
+    end
+
+    def test_rjs
+      assert_equal(<<HTML, render(<<HAML, :action_view))
+window.location.reload();
+HTML
+= update_page do |p|
+  - p.reload
 HAML
     end
   end

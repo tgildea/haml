@@ -55,12 +55,66 @@ When the {file:HAML_REFERENCE.md#ugly-option `:ugly` option} is enabled,
 {Haml::Helpers#haml_tag haml\_tag} and {Haml::Helpers#haml_concat haml\_concat}
 won't do any indentation of their arguments.
 
-### Object Reference Customization
+### Basic Tag Improvements
 
-It's now possible to customize the name used for {file:HAML_REFERENCE.md#object_reference_ object reference}
-for a given object by implementing the `haml_object_ref` method on that object.
-This method should return a string that will be used in place of the class name of the object
-in the generated class and id.
+* It's now possible to customize the name used for {file:HAML_REFERENCE.md#object_reference_ object reference}
+  for a given object by implementing the `haml_object_ref` method on that object.
+  This method should return a string that will be used in place of the class name of the object
+  in the generated class and id.
+
+* All attribute values may be non-String types.
+  Their `#to_s` method will be called to convert them to strings.
+  Previously, this only worked for attributes other than `class`.
+  
+### `:class` and `:id` Attributes Accept Ruby Arrays
+
+In an attribute hash, the `:class` attribute now accepts an Array
+whose elements will be converted to strings and joined with `" "`.
+Likewise, the `:id` attribute now accepts an Array
+whose elements will be converted to strings and joined with `"_"`.
+The array will first be flattened and any elements that do not test as true
+will be stripped out. For example:
+
+    .column{:class => [@item.type, @item == @sortcol && [:sort, @sortdir]] }
+
+could render as any of:
+
+    class="column numeric sort ascending"
+    class="column numeric"
+    class="column sort descending"
+    class="column"
+
+depending on whether `@item.type` is `"numeric"` or `nil`,
+whether `@item == @sortcol`,
+and whether `@sortdir` is `"ascending"` or `"descending"`.
+
+A single value can still be specified.
+If that value evaluates to false it is ignored;
+otherwise it gets converted to a string.
+For example:
+
+    .item{:class => @item.is_empty? && "empty"}
+
+could render as either of:
+
+    class="item"
+    class="item empty"
+
+Thanks to [Ronen Barzel](http://www.ronenbarzel.org/).
+
+### HTML5 Custom Data Attributes
+
+Creating an attribute named `:data` with a Hash value
+will generate [HTML5 custom data attributes](http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#embedding-custom-non-visible-data).
+For example:
+
+    %div{:data => {:author_id => 123, :post_id => 234}}
+
+Will compile to:
+
+    <div data-author_id='123' data-post_id='234'></div>
+
+Thanks to [John Reilly](http://twitter.com/johnreilly).
 
 ### More Powerful `:autoclose` Option
 
@@ -72,6 +126,11 @@ can now take regular expressions that specify which tags to make self-closing.
 The Haml executable now has a `--double-quote-attributes` option (short form: `-q`)
 that causes attributes to use a double-quote mark rather than single-quote.
 
+### `:css` Filter
+
+Haml now supports a {file:HAML_REFERENCE.md#css-filter `:css` filter}
+that surrounds the filtered text with `<style>` and CDATA tags.
+
 ### `haml-spec` Integration
 
 We've added the cross-implementation tests from the [haml-spec](http://github.com/norman/haml-spec) project
@@ -80,14 +139,24 @@ of the many and varied [Haml implementations](http://en.wikipedia.org/wiki/Haml#
 
 ### Ruby 1.9 Support
 
-Haml and `html2haml` now produce more descriptive errors
-when given a template with invalid byte sequences for that template's encoding,
-including the line number and the offending character.
+* Haml and `html2haml` now produce more descriptive errors
+  when given a template with invalid byte sequences for that template's encoding,
+  including the line number and the offending character.
 
-### `:css` Filter
+* Haml and `html2haml` now accept Unicode documents with a
+  [byte-order-mark](http://en.wikipedia.org/wiki/Byte_order_mark).
 
-Haml now supports a {file:HAML_REFERENCE.md#css-filter `:css` filter}
-that surrounds the filtered text with `<style>` and CDATA tags.
+### Rails Support
+
+* When `form_for` is used with `=`, or `form_tag` is used with `=` and a block,
+  they will now raise errors explaining that they should be used with `-`.
+  This is similar to how {Haml::Helpers#haml\_concat} behaves,
+  and will hopefully clear up some difficult bugs for some users.
+
+### Rip Support
+
+Haml is now compatible with the [Rip](http://hellorip.com/) package management system.
+Thanks to [Josh Peek](http://joshpeek.com/).
 
 ### `html2haml` Improvements
 
@@ -188,10 +257,60 @@ that surrounds the filtered text with `<style>` and CDATA tags.
 * The `puts` helper has been removed.
   Use {Haml::Helpers#haml\_concat} instead.
 
-## 2.2.20 (Unreleased)
+## 2.2.22
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.22).
+
+* Add a railtie so Haml and Sass will be automatically loaded in Rails 3.
+  Thanks to [Daniel Neighman](http://pancakestacks.wordpress.com/).
+
+* Add a deprecation message for using `-` with methods like `form_for`
+  that return strings in Rails 3.
+  This is [the same deprecation that exists in Rails 3](http://github.com/rails/rails/commit/9de83050d3a4b260d4aeb5d09ec4eb64f913ba64).
+
+* Make sure line numbers are reported correctly when filters are being used.
+
+* Make loading the gemspec not crash on read-only filesystems like Heroku's.
+
+* Don't crash when methods like `form_for` return `nil` in, for example, Rails 3 beta.
+
+* Compatibility with Rails 3 beta's RJS facilities.
+
+## 2.2.21
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.21).
+
+* Fix a few bugs in the git-revision-reporting in {Haml::Version#version}.
+  In particular, it will still work if `git gc` has been called recently,
+  or if various files are missing.
+
+* Always use `__FILE__` when reading files within the Haml repo in the `Rakefile`.
+  According to [this bug report](http://github.com/carlhuda/bundler/issues/issue/44),
+  this should make Haml work better with Bundler.
+
+* Make the error message for `- end` a little more intuitive based on user feedback.
+
+* Compatibility with methods like `form_for`
+  that return strings rather than concatenate to the template in Rails 3.
+
+* Add a {Haml::Helpers#with_tabs with_tabs} helper,
+  which sets the indentation level for the duration of a block.
+
+## 2.2.20
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.20).
 
 * The `form_tag` Rails helper is now properly marked as HTML-safe
   when using Rails' XSS protection with Rails 2.3.5.
+
+* Calls to `defined?` shouldn't interfere with Rails' autoloading
+  in very old versions (1.2.x).
+
+* Fix a bug where calls to ActionView's `render` method
+  with blocks and layouts wouldn't work under the Rails 3.0 beta.
+
+* Fix a bug where the closing tags of nested calls to \{Haml::Helpers#haml\_concat}
+  were improperly escaped under the Rails 3.0 beta.
 
 ## 2.2.19
 

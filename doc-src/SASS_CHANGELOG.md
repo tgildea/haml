@@ -102,7 +102,7 @@ and all of them will be watched:
 File and directory watching is accessible from Ruby,
 using the {Sass::Plugin#watch} function.
 
-### Bulk Updating
+#### Bulk Updating
 
 Another new flag for the `sass` command-line utility is `--update`.
 It checks a group of Sass files to see if their CSS needs to be updated,
@@ -118,14 +118,30 @@ In fact, `--update` work exactly the same as `--watch`,
 except that it doesn't continue watching the files
 after the first check.
 
-### Variable Names
+### Syntax
 
-SassScript variable names may now contain hyphens.
+#### Variable and Mixin Names
+
+SassScript variable and mixin names may now contain hyphens.
 For example:
 
     !prettiest-color = #542FA9
+    =pretty-text
+      color = !prettiest-color
 
-### Single-Quoted Strings
+In order to allow frameworks like [Compass](http://compass-style.org)
+to use hyphens in variable names
+while maintaining backwards-compatibility,
+variables and mixins using hyphens may be referred to
+with underscores, and vice versa.
+For example:
+
+    !prettiest-color = #542FA9
+    .pretty
+      // Using an underscore instead of a hyphen works
+      color = !prettiest_color
+
+#### Single-Quoted Strings
 
 SassScript now supports single-quoted strings.
 They behave identically to double-quoted strings,
@@ -162,14 +178,32 @@ That is, with the nested properties indented in the source.
 
 ### Ruby 1.9 Support
 
-Sass and `css2sass` now produce more descriptive errors
-when given a template with invalid byte sequences for that template's encoding,
-including the line number and the offending character.
+* Sass and `css2sass` now produce more descriptive errors
+  when given a template with invalid byte sequences for that template's encoding,
+  including the line number and the offending character.
+
+* Sass and `css2sass` now accept Unicode documents with a
+  [byte-order-mark](http://en.wikipedia.org/wiki/Byte_order_mark).
 
 ### Rack Support
 
 The Sass Rails plugin now works using Rack middleware by default
 in versions of Rails that support it (2.3 and onwards).
+
+### Firebug Support
+
+A new {file:SASS_REFERENCE.md#debug_info-option `:debug_info` option}
+has been added that emits line-number and filename information
+to the CSS file in a browser-readable format.
+This can be used with the new [FireSass Firebug extension](https://addons.mozilla.org/en-US/firefox/addon/103988)
+to report the Sass filename and line number for generated CSS files.
+
+This is also available via the `--debug-info` command-line flag.
+
+### Rip Support
+
+Haml is now compatible with the [Rip](http://hellorip.com/) package management system.
+Thanks to [Josh Peek](http://joshpeek.com/).
 
 ### Sass::Plugin Callbacks
 
@@ -210,6 +244,40 @@ Several bug fixes and minor improvements have been made, including:
   rather than `fuchsia 12`,
   and `tealbang(12)` now renders as `tealbang(12)`
   rather than `teal bang(12)`.
+
+## 2.2.22
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.22).
+
+* Add a railtie so Haml and Sass will be automatically loaded in Rails 3.
+  Thanks to [Daniel Neighman](http://pancakestacks.wordpress.com/).
+
+* Make loading the gemspec not crash on read-only filesystems like Heroku's.
+
+## 2.2.21
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.21).
+
+* Fix a few bugs in the git-revision-reporting in {Haml::Version#version}.
+  In particular, it will still work if `git gc` has been called recently,
+  or if various files are missing.
+
+* Always use `__FILE__` when reading files within the Haml repo in the `Rakefile`.
+  According to [this bug report](http://github.com/carlhuda/bundler/issues/issue/44),
+  this should make Sass work better with Bundler.
+
+## 2.2.20
+
+[Tagged on GitHub](http://github.com/nex3/haml/commit/2.2.20).
+
+* If the cache file for a given Sass file is corrupt
+  because it doesn't have enough content,
+  produce a warning and read the Sass file
+  rather than letting the exception bubble up.
+  This is consistent with other sorts of sassc corruption handling.
+
+* Calls to `defined?` shouldn't interfere with Rails' autoloading
+  in very old versions (1.2.x).
 
 ## 2.2.19
 

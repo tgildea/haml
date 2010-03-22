@@ -310,6 +310,50 @@ is compiled to:
 
     <script src='javascripts/script_9' type='text/javascript'></script>
 
+#### `:class` and `:id` Attributes
+{#class-and-id-attributes}
+
+The `:class` and `:id` attributes can also be specified as a Ruby array
+whose elements will be joined together.
+A `:class` array is joined with `" "`
+and an `:id` array is joined with `"_"`.
+For example:
+
+    %div{:id => [@item.type, @item.number], :class => [@item.type, @item.urgency]}
+
+is equivalent to:
+
+    %div{:id => "#{@item.type}_#{@item.number}", :class => "#{@item.type} #{@item.urgency}"}
+
+The array will first be flattened
+and any elements that do not test as true will be removed.
+The remaining elements will be converted to strings.
+For example:
+
+    %div{:class => [@item.type, @item == @sortcol && [:sort, @sortdir]] } Contents
+
+could render as any of:
+
+    <div class="column numeric sort ascending">Contents</div>
+    <div class="column numeric">Contents</div>
+    <div class="column sort descending">Contents</div>
+    <div class="column">Contents</div>
+
+depending on whether `@item.type` is `"numeric"` or `nil`,
+whether `@item == @sortcol`,
+and whether `@sortdir` is `"ascending"` or `"descending"`.
+
+If a single value is specified and it evaluates to false it is ignored;
+otherwise it gets converted to a string.
+For example:
+
+    .item{:class => @item.is_empty? && "empty"}
+
+could render as either of:
+
+    class="item"
+    class="item empty"
+
 #### HTML-style Attributes: `()`
 
 Haml also supports a terser, less Ruby-specific attribute syntax
@@ -428,6 +472,21 @@ or using `true` and `false`:
 
     %input(selected=true)
 
+#### HTML5 Custom Data Attributes
+
+HTML5 allows for adding [custom non-visible data attributes](http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#embedding-custom-non-visible-data)
+to elements using attribute names beginning with `data-`.
+Custom data attributes can be used in Haml by using the key `:data` with a Hash value
+in an attribute hash.
+Each of the key/value pairs in the Hash will be transformed into a custom data attribute.
+For example:
+
+    %a{:href=>"/posts", :data => {:author_id => 123}} Posts By Author
+
+will render as:
+
+    <a data-author_id='123' href='/posts'>Posts By Author</a>
+
 ### Class and ID: `.` and `#`
 
 The period and pound sign are borrowed from CSS.
@@ -453,11 +512,11 @@ is compiled to:
 
 And,
 
-    #content
-      .articles
-        .article.title Doogie Howser Comes Out
-        .article.date 2006-11-05
-        .article.entry
+    %div#content
+      %div.articles
+        %div.article.title Doogie Howser Comes Out
+        %div.article.date 2006-11-05
+        %div.article.entry
           Neil Patrick Harris would like to dispel any rumors that he is straight
 
 is compiled to:
@@ -471,6 +530,22 @@ is compiled to:
         </div>
       </div>
     </div>
+
+These shortcuts can be combined with long-hand attributes;
+the two values will be merged together
+as though they were all placed in an array
+(see [the documentation on `:class` and `:id` attributes](#class-and-id-attributes)).
+For example:
+
+    %div#Article.article.entry{:id => @article.number, :class => @article.visibility}
+
+is equivalent to
+
+    %div{:id => ['Article', @article.number], :class => ['article', 'entry', @article.visibility]} Gabba Hey
+
+and could compile to:
+
+    <div class="article entry visible" id="Article_27">Gabba Hey</div>
 
 #### Implicit Div Elements
 

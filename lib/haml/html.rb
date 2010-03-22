@@ -109,7 +109,7 @@ module Haml
   #
   # Example usage:
   #
-  #     Haml::Engine.new("<a href='http://google.com'>Blat</a>").render
+  #     Haml::HTML.new("<a href='http://google.com'>Blat</a>").render
   #       #=> "%a{:href => 'http://google.com'} Blat"
   class HTML
     # @param template [String, Hpricot::Node] The HTML template to convert
@@ -127,7 +127,7 @@ module Haml
           template = template.read
         end
 
-        Haml::Util.check_encoding(template) {|msg, line| raise Haml::Error.new(msg, line)}
+        template = Haml::Util.check_encoding(template) {|msg, line| raise Haml::Error.new(msg, line)}
 
         if @options[:erb]
           require 'haml/html/erb'

@@ -92,17 +92,49 @@ module Haml
         html_escape(text)
       end
     end
+
+    class ErrorReturn
+      # Any attempt to treat ErrorReturn as a string should cause it to blow up.
+      alias_method :html_safe, :to_s
+      alias_method :html_safe?, :to_s
+      alias_method :html_safe!, :to_s
+    end
   end
 end
 
 module ActionView
   module Helpers
+    module CaptureHelper
+      def with_output_buffer_with_haml_xss(*args, &block)
+        res = with_output_buffer_without_haml_xss(*args, &block)
+        case res
+        when Array; res.map {|s| Haml::Util.html_safe(s)}
+        when String; Haml::Util.html_safe(res)
+        else; res
+        end
+      end
+      alias_method :with_output_buffer_without_haml_xss, :with_output_buffer
+      alias_method :with_output_buffer, :with_output_buffer_with_haml_xss
+    end
+
     module FormTagHelper
       def form_tag_with_haml_xss(*args, &block)
-        Haml::Util.html_safe(form_tag_without_haml_xss(*args, &block))
+        res = form_tag_without_haml_xss(*args, &block)
+        res = Haml::Util.html_safe(res) unless block_given?
+        res
       end
       alias_method :form_tag_without_haml_xss, :form_tag
       alias_method :form_tag, :form_tag_with_haml_xss
+    end
+
+    module FormHelper
+      def form_for_with_haml_xss(*args, &block)
+        res = form_for_without_haml_xss(*args, &block)
+        return Haml::Util.html_safe(res) if res.is_a?(String)
+        return res
+      end
+      alias_method :form_for_without_haml_xss, :form_for
+      alias_method :form_for, :form_for_with_haml_xss
     end
 
     module TextHelper

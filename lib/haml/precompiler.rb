@@ -194,7 +194,6 @@ END
         if flat?
           push_flat(@line)
           @line = @next_line
-          newline
           next
         end
 
@@ -250,11 +249,12 @@ END
         return start_haml_comment if text[1] == SILENT_COMMENT
 
         raise SyntaxError.new(<<END.rstrip, index) if text[1..-1].strip == "end"
-You don't need to use "- end" in Haml. Use indentation instead:
+You don't need to use "- end" in Haml. Un-indent to close a block:
 - if foo?
   %strong Foo!
 - else
   Not foo.
+%p This line is un-indented, so it isn't part of the "if" block
 END
 
         push_silent(text[1..-1], true)
@@ -548,8 +548,17 @@ END
       quote_escape = attr_wrapper == '"' ? "&quot;" : "&apos;"
       other_quote_char = attr_wrapper == '"' ? "'" : '"'
 
+      if attributes['data'].is_a?(Hash)
+        attributes = attributes.dup
+        attributes =
+          Haml::Util.map_keys(attributes.delete('data')) {|name| "data-#{name}"}.merge(attributes)
+      end
+
       result = attributes.collect do |attr, value|
         next if value.nil?
+
+        value = filter_and_join(value, ' ') if attr == :class
+        value = filter_and_join(value, '_') if attr == :id
 
         if value == true
           next " #{attr}" if is_html
@@ -572,6 +581,11 @@ END
         " #{attr}=#{this_attr_wrapper}#{value}#{this_attr_wrapper}"
       end
       result.compact.sort.join
+    end
+
+    def self.filter_and_join(value, separator)
+      value = [value] unless value.is_a?(Array)
+      return value.flatten.collect {|item| item ? item.to_s : nil}.compact.join(separator)
     end
 
     def prerender_tag(name, self_close, attributes)

@@ -36,7 +36,14 @@ class EngineTest < Test::Unit::TestCase
     "%p{:a => 'b',\n:c => 'd',\n:e => raise('foo')}" => ["foo", 3],
     " %p foo" => "Indenting at the beginning of the document is illegal.",
     "  %p foo" => "Indenting at the beginning of the document is illegal.",
-    "- end" => "You don't need to use \"- end\" in Haml. Use indentation instead:\n- if foo?\n  %strong Foo!\n- else\n  Not foo.",
+    "- end" => <<MESSAGE.rstrip,
+You don't need to use "- end" in Haml. Un-indent to close a block:
+- if foo?
+  %strong Foo!
+- else
+  Not foo.
+%p This line is un-indented, so it isn't part of the "if" block
+MESSAGE
     " \n\t\n %p foo" => ["Indenting at the beginning of the document is illegal.", 3],
     "\n\n %p foo" => ["Indenting at the beginning of the document is illegal.", 3],
     "%p\n  foo\n foo" => ["Inconsistent indentation: 1 space was used for indentation, but the rest of the document was indented using 2 spaces.", 3],
@@ -73,6 +80,11 @@ class EngineTest < Test::Unit::TestCase
     "!!!\n\n  bar" => ["Illegal nesting: nesting within a header command is illegal.", 3],
     "foo\n:ruby\n  1\n  2\n  3\n- raise 'foo'" => ["foo", 6],
     "foo\n:erb\n  1\n  2\n  3\n- raise 'foo'" => ["foo", 6],
+    "foo\n:plain\n  1\n  2\n  3\n- raise 'foo'" => ["foo", 6],
+    "foo\n:plain\n  1\n  2\n  3\n4\n- raise 'foo'" => ["foo", 7],
+    "foo\n:plain\n  1\n  2\n  3\#{''}\n- raise 'foo'" => ["foo", 6],
+    "foo\n:plain\n  1\n  2\n  3\#{''}\n4\n- raise 'foo'" => ["foo", 7],
+    "foo\n:plain\n  1\n  2\n  \#{raise 'foo'}" => ["foo", 5],
     "= raise 'foo'\nfoo\nbar\nbaz\nbang" => ["foo", 1],
   }
 
@@ -130,6 +142,29 @@ class EngineTest < Test::Unit::TestCase
     assert_equal("<p class='3'>foo</p>", render("%p{:class => 1+2} foo").chomp)
   end
 
+  def test_class_attr_with_array
+    assert_equal("<p class='a b'>foo</p>\n", render("%p{:class => %w[a b]} foo")) # basic
+    assert_equal("<p class='a b css'>foo</p>\n", render("%p.css{:class => %w[a b]} foo")) # merge with css
+    assert_equal("<p class='b css'>foo</p>\n", render("%p.css{:class => %w[css b]} foo")) # merge uniquely
+    assert_equal("<p class='a b c d'>foo</p>\n", render("%p{:class => [%w[a b], %w[c d]]} foo")) # flatten
+    assert_equal("<p class='a b'>foo</p>\n", render("%p{:class => [:a, :b] } foo")) # stringify
+    assert_equal("<p class=''>foo</p>\n", render("%p{:class => [nil, false] } foo")) # strip falsey
+    assert_equal("<p class='a'>foo</p>\n", render("%p{:class => :a} foo")) # single stringify
+    assert_equal("<p>foo</p>\n", render("%p{:class => false} foo")) # single falsey
+    assert_equal("<p class='a b html'>foo</p>\n", render("%p(class='html'){:class => %w[a b]} foo")) # html attrs
+  end
+
+  def test_id_attr_with_array
+    assert_equal("<p id='a_b'>foo</p>\n", render("%p{:id => %w[a b]} foo")) # basic
+    assert_equal("<p id='css_a_b'>foo</p>\n", render("%p#css{:id => %w[a b]} foo")) # merge with css
+    assert_equal("<p id='a_b_c_d'>foo</p>\n", render("%p{:id => [%w[a b], %w[c d]]} foo")) # flatten
+    assert_equal("<p id='a_b'>foo</p>\n", render("%p{:id => [:a, :b] } foo")) # stringify
+    assert_equal("<p id=''>foo</p>\n", render("%p{:id => [nil, false] } foo")) # strip falsey
+    assert_equal("<p id='a'>foo</p>\n", render("%p{:id => :a} foo")) # single stringify
+    assert_equal("<p>foo</p>\n", render("%p{:id => false} foo")) # single falsey
+    assert_equal("<p id='html_a_b'>foo</p>\n", render("%p(id='html'){:id => %w[a b]} foo")) # html attrs
+  end
+
   def test_dynamic_attributes_with_no_content
     assert_equal(<<HTML, render(<<HAML))
 <p>
@@ -138,6 +173,20 @@ class EngineTest < Test::Unit::TestCase
 HTML
 %p
   %a{:href => "http://" + "haml-lang.com"}
+HAML
+  end
+
+  def test_attributes_with_to_s
+    assert_equal(<<HTML, render(<<HAML))
+<p id='foo_2'></p>
+<p class='2 foo'></p>
+<p blaz='2'></p>
+<p 2='2'></p>
+HTML
+%p#foo{:id => 1+1}
+%p.foo{:class => 1+1}
+%p{:blaz => 1+1}
+%p{(1+1) => 1+1}
 HAML
   end
 
@@ -597,8 +646,9 @@ HAML
 <p>foo-end</p>
 <p>bar-end</p>
 HTML
-- "foo-end-bar-end".gsub(/\\w+-end/) do |s|
+- ("foo-end-bar-end".gsub(/\\w+-end/) do |s|
   %p= s
+- end; nil)
 HAML
   end
 
@@ -1150,6 +1200,47 @@ SASS
     assert_equal %{<!DOCTYPE html>\n}, render('!!!', :format => :html5)
   end
 
+  # HTML5 custom data attributes
+  def test_html5_data_attributes
+    assert_equal("<div data-author_id='123' data-biz='baz' data-foo='bar'></div>\n",
+      render("%div{:data => {:author_id => 123, :foo => 'bar', :biz => 'baz'}}"))
+
+    assert_equal("<div data-one_plus_one='2'></div>\n",
+      render("%div{:data => {:one_plus_one => 1+1}}"))
+
+    assert_equal("<div data-foo='Here&apos;s a \"quoteful\" string.'></div>\n",
+      render(%{%div{:data => {:foo => %{Here's a "quoteful" string.}}}})) #'
+  end
+
+  def test_html5_data_attributes_with_multiple_defs
+    # Should always use the more-explicit attribute
+    assert_equal("<div data-foo='second'></div>\n",
+      render("%div{:data => {:foo => 'first'}, 'data-foo' => 'second'}"))
+    assert_equal("<div data-foo='first'></div>\n",
+      render("%div{'data-foo' => 'first', :data => {:foo => 'second'}}"))
+  end
+
+  def test_html5_data_attributes_with_attr_method
+    Haml::Helpers.module_eval do
+      def data_hash
+        {:data => {:foo => "bar", :baz => "bang"}}
+      end
+
+      def data_val
+        {:data => "dat"}
+      end
+    end
+
+    assert_equal("<div data-baz='bang' data-brat='wurst' data-foo='blip'></div>\n",
+      render("%div{data_hash, :data => {:foo => 'blip', :brat => 'wurst'}}"))
+    assert_equal("<div data-baz='bang' data-foo='blip'></div>\n",
+      render("%div{data_hash, 'data-foo' => 'blip'}"))
+    assert_equal("<div data-baz='bang' data-foo='bar' data='dat'></div>\n",
+      render("%div{data_hash, :data => 'dat'}"))
+    assert_equal("<div data-brat='wurst' data-foo='blip' data='dat'></div>\n",
+      render("%div{data_val, :data => {:foo => 'blip', :brat => 'wurst'}}"))
+  end
+
   # New attributes
 
   def test_basic_new_attributes
@@ -1249,6 +1340,17 @@ SASS
   end
 
   # Encodings
+
+  def test_utf_8_bom
+    assert_equal <<CSS, render(<<SCSS)
+<div class='foo'>
+  <p>baz</p>
+</div>
+CSS
+\xEF\xBB\xBF.foo
+  %p baz
+SCSS
+  end
 
   unless Haml::Util.ruby1_8?
     def test_default_encoding
